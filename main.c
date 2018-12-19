@@ -13,8 +13,18 @@
 //#include <avr/pgmspace.h>
 #include <avr/sleep.h>
 
+#include <ctype.h>
+#include <stdint.h>
+#include <stdio.h>
+
+#include "routines.h"
 
 /***************************************************/
+
+#define STATE_NORMAL 0
+#define STATE_CHARGING 1
+#define STATE_LOW 2
+
 
 #define pCHARGE PORTD
 #define CHARGE PD2
@@ -35,10 +45,10 @@
 #define OPTO3 PB5
 
 #define pLED_G PORTB
-#define LED_G PB7
+#define LED_G PB6
 
 #define pLED_R PORTB
-#define LED_R PB6
+#define LED_R PB7
 
 
 //0,01V
@@ -49,16 +59,18 @@ uint16_t parBurnStop=400; // when start burning for specific cell
 uint16_t parMinBurnTime=10; // 0,1s
 
 
-uint8_t currentState=0,nextState=0;
+uint8_t currentState=STATE_NORMAL,nextState=STATE_NORMAL;
 
 uint8_t stepTimer=0;
+
+static FILE uart_str = FDEV_SETUP_STREAM(uart_putchar, NULL, _FDEV_SETUP_WRITE);
 
 /***************************************************/
 int main(void)
 {
 
 	//set outputs
-	DDRB = (1<<OPTO1) | (1<<OPTO2) | (1<<OPTO3);
+	DDRB = (1<<OPTO1) | (1<<OPTO2) | (1<<OPTO3) | (1<<LED_G) | (1<<LED_R);
 	//set outputs
 	DDRD = (1<<CHARGE) | (1<<OUT);
 
@@ -81,21 +93,34 @@ int main(void)
 	//set_sleep_mode(SLEEP_MODE_PWR_DOWN);
 
 	//init interrupt
-	sei();
+	//sei();
 
-
+	USARTInit();
 	
+	// ADC initialization
+	  ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS0); //division factor:32
+
+
 	_delay_s(1);
 
+	stdout = stdin = &uart_str;
+
+	//fprintf(stdout, "Hello world!\n");
+	printf("START of the program!\n");
 
 	while(1){
+
+
+		printf("ADC0:%d\n",(uint16_t)((((uint32_t)ReadADC(0))*1314)/1000));//876 = 11,51
+	printf("ADC1:%d\n",ReadADC(1));
+	printf("ADC2:%d\n",ReadADC(2));
 
 		setBit(&pLED_G,LED_G);
 		clearBit(&pLED_R,LED_R);
 		
 		_delay_s(1);
 		
-		clearBit(&pLED_G,LED_G);
+	/*	clearBit(&pLED_G,LED_G);
 		setBit(&pLED_R,LED_R);
 		
 		_delay_s(1);
@@ -123,9 +148,9 @@ int main(void)
 		
 		_delay_s(1);
 		
-		clearBit(&pOPTO3,OPTO3);
+		clearBit(&pOPTO3,OPTO3);*/
 		
-		
+		/*
 		switch(currentState){
 			case STATE_NORMAL:
 			
@@ -196,15 +221,12 @@ int main(void)
 			clearBit(&pLED_R,LED_R);
 		}
 		//////////////////////////////////////////////////////////////////////////////
-		
+		*/
 	}
 
 return 0;
 }
 
-uint16_t ReadADC(uint8_t channel){//read voltages in 0,01V
-
-}
 
 void CellBalancing(){
 	//CELL BALANCING
