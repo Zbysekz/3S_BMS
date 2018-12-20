@@ -7,3 +7,7 @@ uint8_t getBit(volatile uint8_t port, int bit);
 
 void CellBalancing(void);
 void ResetOptos();
+
+uint16_t ReadCellA();
+uint16_t ReadCellB();
+uint16_t ReadCellC();
