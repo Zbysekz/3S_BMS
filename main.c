@@ -64,13 +64,13 @@ uint16_t parOk=340; // when go back to NORMAL
 uint16_t parBurnStart=420; // when start burning for specific cell
 uint16_t parBurnStop=405; // when stop burning for specific cell
 uint16_t parMinBurnTime=10; // 0,1s
-
+uint16_t parFullDelay=600; // when all cells where full, wait at least this time to start charging again
 
 uint8_t currentState=STATE_NORMAL,nextState=STATE_NORMAL;
 
 volatile uint8_t stepTimer=0;
 
-volatile uint16_t tmrBlink1,tmrBlink2,tmrGeneral,tmrBurn1,tmrBurn2,tmrBurn3;
+volatile uint16_t tmrBlink1,tmrBlink2,tmrGeneral,tmrBurn1,tmrBurn2,tmrBurn3,tmrFull;
 
 static FILE uart_str = FDEV_SETUP_STREAM(uart_putchar, NULL, _FDEV_SETUP_WRITE);
 
@@ -90,12 +90,20 @@ int main(void)
 	// Clock value: 244 Hz
 	TCCR0B=(1<<CS01);//div 8
 	TCNT0=0x00;
-
 	// Timer(s)/Counter(s) Interrupt(s) initialization
 	TIMSK0=(1<<TOIE0);//overflow enable
 
+	// Timer/Counter 2 initialization
+	// Clock source: System Clock
+	// Clock value: 244 Hz
+	TCCR2B=(1<<CS22)|(1<<CS21)|(1<<CS20);//div 1024
+	TCNT2=0x00;
+	// Timer(s)/Counter(s) Interrupt(s) initialization
+	TIMSK2=(1<<TOIE2);//overflow enable
+
+
 	// Use the Power Down sleep mode
-	//set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+	set_sleep_mode(SLEEP_MODE_PWR_SAVE);
 
 	//init interrupt
 	sei();
@@ -164,11 +172,13 @@ int main(void)
 				}
 				
 				//if we are burning energy for all of the cells, stop charging
-				if(getBit(pOPTO1,OPTO1) && getBit(pOPTO2,OPTO2) && getBit(pOPTO3,OPTO3))
+				if(getBit(pOPTO1,OPTO1) && getBit(pOPTO2,OPTO2) && getBit(pOPTO3,OPTO3)){
 					clearBit(&pCHARGE,CHARGE);
-				else 
-					setBit(&pCHARGE,CHARGE);
-				
+					tmrFull=parFullDelay;
+				}else{
+					if(tmrFull==0)//start charging again after some delay
+						setBit(&pCHARGE,CHARGE);
+				}
 				
 				//if charger is not connected anymore, go to normal operation
 				if(getBit(pCHARGE_SIG,CHARGE_SIG)){
@@ -181,7 +191,16 @@ int main(void)
 			
 				ResetOptos();//turn off all optos
 				
-				//sleep and check sometimes if you can go out of this state
+				cli();//sleep and check sometimes if you can go out of this state
+				if (tmrBlink1==0)//only when you finish red fast blinking
+				{
+					sleep_enable();
+					sei();
+					sleep_cpu();
+					sleep_disable();
+				}
+				sei();
+
 				
 				//if voltages are ok, go to normal
 				if(ReadCellA()>=parOk && ReadCellB()>=parOk && ReadCellC()>=parOk){
@@ -296,12 +315,20 @@ ISR(TIMER0_OVF_vect)
 		if(tmrBurn1>0)tmrBurn1--;
 		if(tmrBurn2>0)tmrBurn2--;
 		if(tmrBurn3>0)tmrBurn3--;
+		if(tmrFull>0)tmrFull--;
 		
 		stepTimer++;
 		
 	}else tmrGeneral++;
 
 }
+
+// Timer 2 overflow interrupt service routine - called each 1,9Hz
+ISR(TIMER2_OVF_vect)
+{
+
+}
+
 ISR(INT0_vect){
 
 }
