@@ -8,13 +8,13 @@
 #include <compat/twi.h>
 #include <avr/interrupt.h>
 #include "twi.h"
-//#include "main.h"
+#include "main.h"
 
 
 #define TWI_SLAVE_ADDR       0x50
 #define BUFFSIZE 10
 
-/*uint8_t rxBuffer[BUFFSIZE];
+uint8_t rxBuffer[BUFFSIZE];
 uint8_t txBuffer[BUFFSIZE];
 
 
@@ -25,9 +25,8 @@ volatile uint8_t regaddr; // Store the Requested Register Address
 volatile uint8_t regdata; // Store the Register Address Data
 
 volatile uint16_t TWI_error;
-/*
-volatile uint8_t buff[30];
-volatile uint8_t buff_p;*/
+
+volatile uint8_t txCRC,updateTX;
 
 ///////CRC//////////////
 
@@ -35,14 +34,14 @@ volatile uint8_t buff_p;*/
  * The width of the CRC calculation and result.
  * Modify the typedef for a 16 or 32-bit CRC standard.
  */
-/*
+
 #define WIDTH  (8 * sizeof(crc))
 #define TOPBIT (1 << (WIDTH - 1))
 
-#define POLYNOMIAL 0x07*/
+#define POLYNOMIAL 0x07
 //////////////////////////
-/*
-static crc crcTable[256];
+
+uint8_t crcTable[256];
 
 void InitCRC(void)
 {
@@ -69,9 +68,9 @@ void InitCRC(void)
         crcTable[dividend] = remainder;
     }
 
-}  */ /* crcInit() */
-/*
-inline crc CalculateCRC( uint8_t const message[], int nBytes)
+}  /* crcInit() */
+
+crc CalculateCRC( uint8_t message[], int nBytes)
 {
     uint8_t data;
     crc remainder = 0;
@@ -79,11 +78,44 @@ inline crc CalculateCRC( uint8_t const message[], int nBytes)
     for (int byte = 0; byte < nBytes; ++byte)
     {
         data = message[byte] ^ (remainder >> (WIDTH - 8));
-        remainder = crcTable[data] ^ (remainder << 8);
+        remainder = (uint8_t)(crcTable[data] ^ (remainder << 8));
     }
     //The final remainder is the CRC.
     return (remainder);
-}  */ /* crcFast() */
+}   /* crcFast() */
+
+void ValidateData(uint8_t crc){
+	//validate if received data are ok
+	/*if(CalculateCRC(rxBuffer,2) == crc){
+		//we can now copy rxBuffer data to specific vars
+		;
+	}*/
+}
+
+void UpdateTxData(){//called at the beginning and every time after CRC value is read by master
+
+	if(updateTX==0)return;
+	txBuffer[0]=currentState;
+	txBuffer[1]=cellA & 0xFF;
+	txBuffer[2]=(cellA & 0xFF00)>>8;
+	txBuffer[3]=cellB & 0xFF;
+	txBuffer[4]=(cellB & 0xFF00)>>8;
+	txBuffer[5]=cellC & 0xFF;
+	txBuffer[6]=(cellC & 0xFF00)>>8;
+
+	/*txBuffer[0]=240;
+	txBuffer[1]=241;
+	txBuffer[2]=242;
+	txBuffer[3]=243;
+	txBuffer[4]=244;
+	txBuffer[5]=245;
+	txBuffer[6]=246;*/
+
+	txCRC=CalculateCRC(txBuffer,7);
+
+	updateTX=0;
+}
+
 
 void TWI_Init(){
 	// Initial I2C Slave
@@ -97,19 +129,19 @@ void TWI_Init(){
 	regaddr=0;
 	regdata=0;
 
-	//UpdateTxData();//update tx data for first time
+	updateTX=1;//update tx data for first time
 }
 
 
 void TWI_SlaveAction(uint8_t rw_status)
 {
-	/*if(regaddr==0){// this is just for communication check
+	if(regaddr==0){// this is just for communication check
 		if (rw_status == 0)
 			regdata = 66;
 	}else if(regaddr == 200){//master is sending CRC to us or wants CRC of our data
 		if (rw_status == 0){
-			regdata = CalculateCRC(txBuffer,7);
-			UpdateTxData();//update next data
+			regdata = txCRC;
+			updateTX=1;//update next data
 		}else
 			ValidateData(regdata);
 	}else if(regaddr>0 && regaddr<BUFFSIZE+1){
@@ -118,16 +150,14 @@ void TWI_SlaveAction(uint8_t rw_status)
 		}else{//write
 			rxBuffer[regaddr-1] = regdata;
 		}
-    }*/
+    }
 }
+
 
 ISR(TWI_vect)
 {
     // Get TWI Status Register, mask the prescaler bits (TWPS1,TWPS0)
     twi_status=TWSR & 0xF8;
-
-    //buff[buff_p++]=twi_status;
-    //if(buff_p>29)buff_p=0;
 
     switch(twi_status) {
         case TW_SR_SLA_ACK: // 0x60: SLA+W received, ACK returned
@@ -172,33 +202,10 @@ ISR(TWI_vect)
             i2c_state = 0;  // Back to the Begining State
     }
 
-    /*buff[buff_p++]=regaddr;
-    if(buff_p>29)buff_p=0;
-    buff[buff_p++]=regdata;
-    if(buff_p>29)buff_p=0;*/
-
     // Clear TWINT Flag
     TWCR |= (1<<TWINT);
 }
-/*
-inline void ValidateData(uint8_t crc){
-	//validate if received data are ok
-	if(CalculateCRC(rxBuffer,2) == crc){
-		//we can now copy rxBuffer data to specific vars
-		;
-	}
-}
 
-inline void UpdateTxData(){//called at the beginning and every time after CRC value is read by master
 
-	txBuffer[0]=currentState;
-	txBuffer[1]=cellA & 0xFF;
-	txBuffer[2]=(cellA & 0xFF00)>>8;
-	txBuffer[3]=cellB & 0xFF;
-	txBuffer[4]=(cellB & 0xFF00)>>8;
-	txBuffer[5]=cellC & 0xFF;
-	txBuffer[6]=(cellC & 0xFF00)>>8;
-
-}*/
 
 

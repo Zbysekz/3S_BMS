@@ -10,7 +10,7 @@
 #include "main.h"
 #include <avr/interrupt.h>
 #include "twi.h"
-//#include <avr/sleep.h>
+#include <avr/sleep.h>
 
 #include <ctype.h>
 #include <stdint.h>
@@ -45,11 +45,11 @@
 #define pOPTO3 PORTB
 #define OPTO3 PB5
 
-#define pLED_G PORTB
-#define LED_G PB7
+#define pLED_G PORTD
+#define LED_G PD6
 
-#define pLED_R PORTB
-#define LED_R PB6
+#define pLED_R PORTD
+#define LED_R PD5
 
 
 #define CELL_A_CALIB 1314 //value calculated as follows:  100 000 * realVoltage / "raw value from ReadADC()"
@@ -80,20 +80,20 @@ int main(void)
 {
 
 	//set outputs
-	DDRB = (1<<OPTO1) | (1<<OPTO2) | (1<<OPTO3) ;//| (1<<LED_G) | (1<<LED_R);
+	DDRB = (1<<OPTO1) | (1<<OPTO2) | (1<<OPTO3) ;
 	//set outputs
-	DDRD = (1<<CHARGE) | (1<<OUT);
+	DDRD = (1<<CHARGE) | (1<<OUT) | (1<<LED_G) | (1<<LED_R);
 
 
 
 	// Timer/Counter 0 initialization
 	// Clock source: System Clock
 	// Clock value: 244 Hz
-	/*TCCR0B=(1<<CS01);//div 8
+	TCCR0B=(1<<CS00) | (1<<CS01);//div 8
 	TCNT0=0x00;
 	// Timer(s)/Counter(s) Interrupt(s) initialization
 	TIMSK0=(1<<TOIE0);//overflow enable
-*/
+
 	// Timer/Counter 2 initialization
 	// Clock source: System Clock
 	// Clock value: 244 Hz
@@ -104,10 +104,10 @@ int main(void)
 */
 
 	TWI_Init();
-	//InitCRC();//calculate table for fast CRC calculation
+	InitCRC();//calculate table for fast CRC calculation
 
 	// Use the Power Down sleep mode
-	//set_sleep_mode(SLEEP_MODE_PWR_SAVE);
+	set_sleep_mode(SLEEP_MODE_PWR_SAVE);
 
 	//init interrupt
 	sei();
@@ -117,7 +117,7 @@ int main(void)
 	// ADC initialization
 	ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS0); //division factor:32
 
-	//_delay_s(1);
+	_delay_s(1);
 
 	//stdout = &uart_str;
 
@@ -125,38 +125,19 @@ int main(void)
 
 	while(1){
 
-		/*for(int i=0;i<30;i++)
-			printf("%d:%d ",i,buff[i]);
-		printf("\n");
-
-		printf("%d,%d,ERR:%d\n",TWSR,TWDR,TWI_error);
-
-		_delay_s(1);*/
-
-		/*if(DEBUG){
-			printf("Cell A: %d\n",ReadCellA());
-			printf("Cell B: %d\n",ReadCellB());
-			printf("Cell C: %d\n\n",ReadCellC());
-			
-			printf("Raw A: %d\n",ReadADC(0));
-			printf("Raw B: %d\n",ReadADC(1));
-			printf("Raw C: %d\n\n",ReadADC(2));
-		}
-		_delay_ms(100);
-
-		printf("currentState: %d\n\n",currentState);*/
+		UpdateTxData();
 
 		switch(currentState){
 			case STATE_NORMAL:
 			
-				//CellBalancing();
+				CellBalancing();
 				
 				//if one of the cell is below threshold go to LOW
-				/*if(cellA<parLow || cellB<parLow || cellC<parLow){
+				if(cellA<parLow || cellB<parLow || cellC<parLow){
 					nextState=STATE_LOW;
 					tmrBlink1=50;tmrBlink2=0;//3secs blink fast red
 					break;
-				}*/
+				}
 				
 				//if charger is connected, go to charging
 				if(!getBit(pCHARGE_SIG,CHARGE_SIG)){
@@ -198,9 +179,11 @@ int main(void)
 			break;
 			
 			case STATE_LOW:
-			/*
+
 				ResetOptos();//turn off all optos
 				
+				ReadCells();
+
 				cli();//sleep and check sometimes if you can go out of this state
 				if (tmrBlink1==0)//only when you finish red fast blinking
 				{
@@ -222,7 +205,7 @@ int main(void)
 				if(!getBit(pCHARGE_SIG,CHARGE_SIG)){
 					nextState=STATE_CHARGING;
 					break;
-				}*/
+				}
 				
 				//output is cut off
 				clearBit(&pOUT,OUT);
@@ -238,7 +221,7 @@ int main(void)
 		
 		
 		////////////////////////LED STATE/////////////////////////////////////////////
-		/*if(currentState == STATE_CHARGING){//red color for CHARGING
+		if(currentState == STATE_CHARGING){//red color for CHARGING
 			clearBit(&pLED_G,LED_G);
 			setBit(&pLED_R,LED_R);
 		}else if (currentState == STATE_LOW){//blink fast red for a while for LOW
@@ -255,7 +238,7 @@ int main(void)
 		}else if (currentState == STATE_NORMAL){//green for NORMAL operation
 			setBit(&pLED_G,LED_G);
 			clearBit(&pLED_R,LED_R);
-		}*/
+		}
 		//////////////////////////////////////////////////////////////////////////////
 
 	}
@@ -355,10 +338,10 @@ ISR(INT0_vect){
 ISR(INT1_vect){
 
 }
-/*void _delay_s(int sec){
+void _delay_s(int sec){
 	for(int c=0;c<sec*10;c++)
 		_delay_ms(100);
-}*/
+}
 
 void setBit(volatile uint8_t *port, int bit){
 	*port|=(1<<bit);
