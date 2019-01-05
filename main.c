@@ -8,10 +8,9 @@
 #include <avr/io.h>
 #include <util/delay.h>
 #include "main.h"
-//#include <stdlib.h>
 #include <avr/interrupt.h>
-//#include <avr/pgmspace.h>
-#include <avr/sleep.h>
+#include "twi.h"
+//#include <avr/sleep.h>
 
 #include <ctype.h>
 #include <stdint.h>
@@ -19,7 +18,7 @@
 
 #include "routines.h"
 
-#define DEBUG 1	// show debug messages on UART?
+#define DEBUG 0	// show debug messages on UART?
 
 /***************************************************/
 
@@ -68,18 +67,20 @@ uint16_t parFullDelay=600; // when all cells where full, wait at least this time
 
 uint8_t currentState=STATE_NORMAL,nextState=STATE_NORMAL;
 
+uint16_t cellA,cellB,cellC;
+
 volatile uint8_t stepTimer=0;
 
 volatile uint16_t tmrBlink1,tmrBlink2,tmrGeneral,tmrBurn1,tmrBurn2,tmrBurn3,tmrFull;
 
-static FILE uart_str = FDEV_SETUP_STREAM(uart_putchar, NULL, _FDEV_SETUP_WRITE);
+//static FILE uart_str = FDEV_SETUP_STREAM(uart_putchar, NULL, _FDEV_SETUP_WRITE);
 
 /***************************************************/
 int main(void)
 {
 
 	//set outputs
-	DDRB = (1<<OPTO1) | (1<<OPTO2) | (1<<OPTO3) | (1<<LED_G) | (1<<LED_R);
+	DDRB = (1<<OPTO1) | (1<<OPTO2) | (1<<OPTO3) ;//| (1<<LED_G) | (1<<LED_R);
 	//set outputs
 	DDRD = (1<<CHARGE) | (1<<OUT);
 
@@ -88,40 +89,49 @@ int main(void)
 	// Timer/Counter 0 initialization
 	// Clock source: System Clock
 	// Clock value: 244 Hz
-	TCCR0B=(1<<CS01);//div 8
+	/*TCCR0B=(1<<CS01);//div 8
 	TCNT0=0x00;
 	// Timer(s)/Counter(s) Interrupt(s) initialization
 	TIMSK0=(1<<TOIE0);//overflow enable
-
+*/
 	// Timer/Counter 2 initialization
 	// Clock source: System Clock
 	// Clock value: 244 Hz
-	TCCR2B=(1<<CS22)|(1<<CS21)|(1<<CS20);//div 1024
+	/*TCCR2B=(1<<CS22)|(1<<CS21)|(1<<CS20);//div 1024
 	TCNT2=0x00;
 	// Timer(s)/Counter(s) Interrupt(s) initialization
 	TIMSK2=(1<<TOIE2);//overflow enable
+*/
 
+	TWI_Init();
+	//InitCRC();//calculate table for fast CRC calculation
 
 	// Use the Power Down sleep mode
-	set_sleep_mode(SLEEP_MODE_PWR_SAVE);
+	//set_sleep_mode(SLEEP_MODE_PWR_SAVE);
 
 	//init interrupt
 	sei();
 
-	USARTInit();
+	//USARTInit();
 	
 	// ADC initialization
-	  ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS0); //division factor:32
+	ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS0); //division factor:32
 
+	//_delay_s(1);
 
-	_delay_s(1);
+	//stdout = &uart_str;
 
-	stdout = &uart_str;
-
-	if(DEBUG)printf("START!\n");
+	//if(DEBUG)printf("START!\n");
 
 	while(1){
 
+		/*for(int i=0;i<30;i++)
+			printf("%d:%d ",i,buff[i]);
+		printf("\n");
+
+		printf("%d,%d,ERR:%d\n",TWSR,TWDR,TWI_error);
+
+		_delay_s(1);*/
 
 		/*if(DEBUG){
 			printf("Cell A: %d\n",ReadCellA());
@@ -139,14 +149,14 @@ int main(void)
 		switch(currentState){
 			case STATE_NORMAL:
 			
-				CellBalancing();
+				//CellBalancing();
 				
 				//if one of the cell is below threshold go to LOW
-				if(ReadCellA()<parLow || ReadCellB()<parLow || ReadCellC()<parLow){
+				/*if(cellA<parLow || cellB<parLow || cellC<parLow){
 					nextState=STATE_LOW;
 					tmrBlink1=50;tmrBlink2=0;//3secs blink fast red
 					break;
-				}
+				}*/
 				
 				//if charger is connected, go to charging
 				if(!getBit(pCHARGE_SIG,CHARGE_SIG)){
@@ -165,7 +175,7 @@ int main(void)
 				
 				//run output only if cells have ok voltage
 				if(stepTimer>10){//be in this step at least 1 sec to control OUT
-					if(ReadCellA()>=parOk && ReadCellB()>=parOk && ReadCellC()>=parOk)
+					if(cellA>=parOk && cellB>=parOk && cellC>=parOk)
 						setBit(&pOUT,OUT);
 					else 
 						clearBit(&pOUT,OUT);
@@ -188,7 +198,7 @@ int main(void)
 			break;
 			
 			case STATE_LOW:
-			
+			/*
 				ResetOptos();//turn off all optos
 				
 				cli();//sleep and check sometimes if you can go out of this state
@@ -203,7 +213,7 @@ int main(void)
 
 				
 				//if voltages are ok, go to normal
-				if(ReadCellA()>=parOk && ReadCellB()>=parOk && ReadCellC()>=parOk){
+				if(cellA>=parOk && cellB>=parOk && cellC>=parOk){
 					nextState=STATE_NORMAL;
 					break;
 				}
@@ -212,7 +222,7 @@ int main(void)
 				if(!getBit(pCHARGE_SIG,CHARGE_SIG)){
 					nextState=STATE_CHARGING;
 					break;
-				}
+				}*/
 				
 				//output is cut off
 				clearBit(&pOUT,OUT);
@@ -221,14 +231,14 @@ int main(void)
 		}
 		
 		if(nextState!=currentState){
-			if(DEBUG)printf("Transition from state %d to %d \n",currentState,nextState);
+			//if(DEBUG)printf("Transition from state %d to %d \n",currentState,nextState);
 			currentState = nextState;
 			stepTimer = 0;
 		}
 		
 		
 		////////////////////////LED STATE/////////////////////////////////////////////
-		if(currentState == STATE_CHARGING){//red color for CHARGING
+		/*if(currentState == STATE_CHARGING){//red color for CHARGING
 			clearBit(&pLED_G,LED_G);
 			setBit(&pLED_R,LED_R);
 		}else if (currentState == STATE_LOW){//blink fast red for a while for LOW
@@ -245,7 +255,7 @@ int main(void)
 		}else if (currentState == STATE_NORMAL){//green for NORMAL operation
 			setBit(&pLED_G,LED_G);
 			clearBit(&pLED_R,LED_R);
-		}
+		}*/
 		//////////////////////////////////////////////////////////////////////////////
 
 	}
@@ -253,47 +263,57 @@ int main(void)
 return 0;
 }
 
-uint16_t ReadCellA(){
-	uint16_t a = (uint16_t)((((uint32_t)ReadADC(0))*CELL_A_CALIB)/1000);
+void ReadCells(){
+	uint16_t a,b,c;
+	/////////////////CELL A//////////////////////
+	a = (uint16_t)((((uint32_t)ReadADC(0))*CELL_A_CALIB)/1000);
 	
-	uint16_t b = (uint16_t)((((uint32_t)ReadADC(1))*CELL_B_CALIB)/1000);
+	b = (uint16_t)((((uint32_t)ReadADC(1))*CELL_B_CALIB)/1000);
 	
-	return a>b?a-b:0;//return difference between first and second if it is positive
-}
-uint16_t ReadCellB(){
-	uint16_t b = (uint16_t)((((uint32_t)ReadADC(1))*CELL_B_CALIB)/1000);
+	cellA=a>b?a-b:0;//return difference between first and second if it is positive
+
+
+	/////////////////CELL B///////////////////////
+
+	b = (uint16_t)((((uint32_t)ReadADC(1))*CELL_B_CALIB)/1000);
 	
-	uint16_t c = (uint16_t)((((uint32_t)ReadADC(2))*CELL_C_CALIB)/1000);
+	c = (uint16_t)((((uint32_t)ReadADC(2))*CELL_C_CALIB)/1000);
 	
-	return b>c?b-c:0;//return difference between second and third if it is positive
-}
-uint16_t ReadCellC(){
-	return (uint16_t)((((uint32_t)ReadADC(2))*CELL_C_CALIB)/1000); //return just third, it is equal to cell C voltage
+	cellB=b>c?b-c:0;//return difference between second and third if it is positive
+
+
+	//////////////////CELL C//////////////////////
+
+	cellC = (uint16_t)((((uint32_t)ReadADC(2))*CELL_C_CALIB)/1000); //return just third, it is equal to cell C voltage
+
 }
 
 void CellBalancing(){
 	//CELL BALANCING
 	//if one of the cell is above threshold, set opto
 	//if it is lower then threshold reset opto
-	if(ReadCellA() > parBurnStart){
+
+	ReadCells();
+
+	if(cellA > parBurnStart){
 		setBit(&pOPTO1,OPTO1);
 		tmrBurn1=parMinBurnTime;
 	}
-	if(ReadCellA() < parBurnStop && tmrBurn1==0)
+	if(cellA < parBurnStop && tmrBurn1==0)
 		clearBit(&pOPTO1,OPTO1);
 	
-	if(ReadCellB() > parBurnStart){
+	if(cellB > parBurnStart){
 		setBit(&pOPTO2,OPTO2);
 		tmrBurn2=parMinBurnTime;
 	}
-	if(ReadCellB() < parBurnStop  && tmrBurn2==0)
+	if(cellB < parBurnStop  && tmrBurn2==0)
 		clearBit(&pOPTO2,OPTO2);
 	
-	if(ReadCellC() > parBurnStart){
+	if(cellC > parBurnStart){
 		setBit(&pOPTO3,OPTO3);
 		tmrBurn3=parMinBurnTime;
 	}
-	if(ReadCellC() < parBurnStop  && tmrBurn3==0)
+	if(cellC < parBurnStop  && tmrBurn3==0)
 		clearBit(&pOPTO3,OPTO3);
 }
 
@@ -335,10 +355,10 @@ ISR(INT0_vect){
 ISR(INT1_vect){
 
 }
-void _delay_s(int sec){
+/*void _delay_s(int sec){
 	for(int c=0;c<sec*10;c++)
 		_delay_ms(100);
-}
+}*/
 
 void setBit(volatile uint8_t *port, int bit){
 	*port|=(1<<bit);

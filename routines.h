@@ -12,6 +12,6 @@
 
 void USARTInit(void);
 uint16_t ReadADC(uint8_t adc_input);
-int uart_putchar(char c, FILE *stream);
+//int uart_putchar(char c, FILE *stream);
 void USART_Transmit( uint8_t data );
 #endif /* ROUTINES_H_ */
