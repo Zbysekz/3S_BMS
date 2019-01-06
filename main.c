@@ -18,7 +18,7 @@
 
 #include "routines.h"
 
-#define DEBUG 0	// show debug messages on UART?
+//#define DEBUG	// show debug messages on UART?
 
 /***************************************************/
 
@@ -60,8 +60,8 @@
 //0,01V
 uint16_t parLow=310; // when go to LOW
 uint16_t parOk=340; // when go back to NORMAL
-uint16_t parBurnStart=420; // when start burning for specific cell
-uint16_t parBurnStop=405; // when stop burning for specific cell
+uint16_t parBurnStart=415; // when start burning for specific cell
+uint16_t parBurnStop=410; // when stop burning for specific cell
 uint16_t parMinBurnTime=10; // 0,1s
 uint16_t parFullDelay=600; // when all cells where full, wait at least this time to start charging again
 
@@ -73,8 +73,9 @@ volatile uint8_t stepTimer=0;
 
 volatile uint16_t tmrBlink1,tmrBlink2,tmrGeneral,tmrBurn1,tmrBurn2,tmrBurn3,tmrFull;
 
-//static FILE uart_str = FDEV_SETUP_STREAM(uart_putchar, NULL, _FDEV_SETUP_WRITE);
-
+#ifdef DEBUG
+static FILE uart_str = FDEV_SETUP_STREAM(uart_putchar, NULL, _FDEV_SETUP_WRITE);
+#endif
 /***************************************************/
 int main(void)
 {
@@ -112,18 +113,17 @@ int main(void)
 	//init interrupt
 	sei();
 
-	//USARTInit();
-	
+	#ifdef DEBUG
+	USARTInit();
+	stdout = &uart_str;
+	#endif
 	// ADC initialization
 	ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS0); //division factor:32
 
 	_delay_s(1);
 
-	//stdout = &uart_str;
-
-	//if(DEBUG)printf("START!\n");
-
 	while(1){
+
 
 		UpdateTxData();
 
@@ -241,6 +241,7 @@ int main(void)
 		}
 		//////////////////////////////////////////////////////////////////////////////
 
+		_delay_ms(100);
 	}
 
 return 0;
@@ -269,6 +270,10 @@ void ReadCells(){
 
 	cellC = (uint16_t)((((uint32_t)ReadADC(2))*CELL_C_CALIB)/1000); //return just third, it is equal to cell C voltage
 
+
+	#ifdef DEBUG
+	printf("%d %d %d \n",cellA,cellB,cellC);
+	#endif
 }
 
 void CellBalancing(){

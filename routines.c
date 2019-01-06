@@ -20,7 +20,7 @@
 uint16_t ReadADC(uint8_t adc_input) {//read voltages in 0,01V
   ADMUX = adc_input | (1 << REFS0);
 // Delay needed for the stabilization of the ADC input voltage
-  _delay_us(10);
+  _delay_us(100);//default was 10us
 // Start the AD conversion
   ADCSRA |= (1 << ADSC); // Start conversion
 // Wait for the AD conversion to complete
@@ -43,7 +43,7 @@ void USARTInit(void)
  * Send character c down the UART Tx, wait until tx holding register
  * is empty.
  */
-/*int
+int
 uart_putchar(char c, FILE *stream)
 {
 
@@ -59,7 +59,7 @@ uart_putchar(char c, FILE *stream)
   UDR0 = c;
 
   return 0;
-}*/
+}
 
 void USART_Transmit( uint8_t data )
 {
