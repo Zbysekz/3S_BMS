@@ -16,7 +16,7 @@
 
 uint8_t rxBuffer[BUFFSIZE];
 uint8_t txBuffer[BUFFSIZE];
-
+uint8_t txBuffer2[BUFFSIZE];
 
 volatile uint8_t i2c_state;
 volatile uint8_t twi_status;
@@ -26,7 +26,7 @@ volatile uint8_t regdata; // Store the Register Address Data
 
 volatile uint16_t TWI_error;
 
-volatile uint8_t txCRC,updateTX;
+volatile uint8_t txCRC,txCRC2,updateTX,buffId,buffId2;;
 
 ///////CRC//////////////
 
@@ -93,25 +93,29 @@ void ValidateData(uint8_t crc){
 }
 
 void UpdateTxData(){//called at the beginning and every time after CRC value is read by master
-
 	if(updateTX==0)return;
-	txBuffer[0]=currentState;
-	txBuffer[1]=cellA & 0xFF;
-	txBuffer[2]=(cellA & 0xFF00)>>8;
-	txBuffer[3]=cellB & 0xFF;
-	txBuffer[4]=(cellB & 0xFF00)>>8;
-	txBuffer[5]=cellC & 0xFF;
-	txBuffer[6]=(cellC & 0xFF00)>>8;
 
-	/*txBuffer[0]=240;
-	txBuffer[1]=241;
-	txBuffer[2]=242;
-	txBuffer[3]=243;
-	txBuffer[4]=244;
-	txBuffer[5]=245;
-	txBuffer[6]=246;*/
+	uint8_t *buff;
 
-	txCRC=CalculateCRC(txBuffer,7);
+	if(buffId==0)
+		buff=txBuffer2;
+	else
+		buff=txBuffer;
+
+	buff[0]=currentState;
+	buff[1]=cellA & 0xFF;
+	buff[2]=(cellA & 0xFF00)>>8;
+	buff[3]=cellB & 0xFF;
+	buff[4]=(cellB & 0xFF00)>>8;
+	buff[5]=cellC & 0xFF;
+	buff[6]=(cellC & 0xFF00)>>8;
+
+	if(buffId==0)
+		txCRC2=CalculateCRC(buff,7);
+	else
+		txCRC=CalculateCRC(buff,7);
+
+	buffId2=buffId?0:1;		//now the TWI interrupt routine can read the updated one
 
 	updateTX=0;
 }
@@ -130,6 +134,7 @@ void TWI_Init(){
 	regdata=0;
 
 	updateTX=1;//update tx data for first time
+	buffId=0;
 }
 
 
@@ -140,13 +145,20 @@ void TWI_SlaveAction(uint8_t rw_status)
 			regdata = 66;
 	}else if(regaddr == 200){//master is sending CRC to us or wants CRC of our data
 		if (rw_status == 0){
-			regdata = txCRC;
+			if(buffId)//switch between two buffers to prevent data corruption while updating
+				regdata = txCRC2;
+			else
+				regdata = txCRC;
 			updateTX=1;//update next data
+			buffId=buffId2;
 		}else
 			ValidateData(regdata);
 	}else if(regaddr>0 && regaddr<BUFFSIZE+1){
 		if(rw_status == 0){ //read
-			regdata = txBuffer[regaddr-1];
+			if(buffId)//switch between two buffers to prevent data corruption while updating
+				regdata = txBuffer2[regaddr-1];
+			else
+				regdata = txBuffer[regaddr-1];
 		}else{//write
 			rxBuffer[regaddr-1] = regdata;
 		}
