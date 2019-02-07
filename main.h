@@ -10,5 +10,6 @@ void ResetOptos();
 
 void ReadCells();
 
+extern volatile uint8_t goOff;
 extern uint8_t currentState;
 extern uint16_t cellA,cellB,cellC;

@@ -86,10 +86,11 @@ crc CalculateCRC( uint8_t message[], int nBytes)
 
 void ValidateData(uint8_t crc){
 	//validate if received data are ok
-	/*if(CalculateCRC(rxBuffer,2) == crc){
+	if(CalculateCRC(rxBuffer,1) == crc){
 		//we can now copy rxBuffer data to specific vars
-		;
-	}*/
+		if(rxBuffer[0]==11)
+			goOff=1;//go off (sleep forever)
+	}
 }
 
 void UpdateTxData(){//called at the beginning and every time after CRC value is read by master

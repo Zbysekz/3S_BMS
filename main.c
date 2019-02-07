@@ -25,7 +25,8 @@
 #define STATE_NORMAL 0
 #define STATE_CHARGING 1
 #define STATE_LOW 2
-
+#define STATE_OFF 3
+#define STATE_WAIT_OFF 4
 
 #define pCHARGE PORTD
 #define CHARGE PD2
@@ -63,15 +64,15 @@ uint16_t parOk=340; // when go back to NORMAL
 uint16_t parBurnStart=415; // when start burning for specific cell
 uint16_t parBurnStop=410; // when stop burning for specific cell
 uint16_t parMinBurnTime=10; // 0,1s
-uint16_t parFullDelay=600; // when all cells where full, wait at least this time to start charging again
+uint16_t parFullDelay=600; // when at least two of cells are full, wait at least this time to start charging again
 
 uint8_t currentState=STATE_NORMAL,nextState=STATE_NORMAL;
 
 uint16_t cellA,cellB,cellC;
 
-volatile uint8_t stepTimer=0;
+volatile uint8_t goOff=0;
 
-volatile uint16_t tmrBlink1,tmrBlink2,tmrGeneral,tmrBurn1,tmrBurn2,tmrBurn3,tmrFull;
+volatile uint16_t stepTimer=0,tmrBlink1,tmrBlink2,tmrGeneral,tmrBurn1,tmrBurn2,tmrBurn3,tmrFull;
 
 #ifdef DEBUG
 static FILE uart_str = FDEV_SETUP_STREAM(uart_putchar, NULL, _FDEV_SETUP_WRITE);
@@ -155,15 +156,16 @@ int main(void)
 				
 				
 				//run output only if cells have ok voltage
-				if(stepTimer>10){//be in this step at least 1 sec to control OUT
+				if(stepTimer>50){//be in this step at least 5 sec to control OUT
 					if(cellA>=parOk && cellB>=parOk && cellC>=parOk)
 						setBit(&pOUT,OUT);
 					else 
 						clearBit(&pOUT,OUT);
 				}
 				
-				//if we are burning energy for all of the cells, stop charging
-				if(getBit(pOPTO1,OPTO1) && getBit(pOPTO2,OPTO2) && getBit(pOPTO3,OPTO3)){
+				//if we are burning energy for two or more cells, stop charging
+
+				if( (getBit(pOPTO1,OPTO1) + getBit(pOPTO2,OPTO2) + getBit(pOPTO3,OPTO3)) >= 2){
 					clearBit(&pCHARGE,CHARGE);
 					tmrFull=parFullDelay;
 				}else{
@@ -211,8 +213,32 @@ int main(void)
 				clearBit(&pOUT,OUT);
 			break;
 			
+			case STATE_WAIT_OFF://delayed entry to STATE_OFF
+				if(stepTimer>20){//wait 20sec
+					nextState=STATE_OFF;
+				}
+				break;
+			case STATE_OFF:
+				ResetOptos();//turn off all optos
+				//output is cut off
+				clearBit(&pOUT,OUT);
+				clearBit(&pLED_G,LED_G);
+				clearBit(&pLED_R,LED_R);
+
+				sleep_enable();
+				cli();//disable interrupts
+				sleep_cpu();//sleep forever
+				sleep_disable();//it shouldn't get here
+				sei();
+				break;
+
 		}
 		
+		if(goOff && (currentState!= STATE_WAIT_OFF)&&(currentState!= STATE_OFF)){
+			nextState=STATE_WAIT_OFF;
+			tmrBlink1=500;
+		}
+
 		if(nextState!=currentState){
 			//if(DEBUG)printf("Transition from state %d to %d \n",currentState,nextState);
 			currentState = nextState;
@@ -224,7 +250,7 @@ int main(void)
 		if(currentState == STATE_CHARGING){//red color for CHARGING
 			clearBit(&pLED_G,LED_G);
 			setBit(&pLED_R,LED_R);
-		}else if (currentState == STATE_LOW){//blink fast red for a while for LOW
+		}else if ((currentState == STATE_LOW)||(currentState == STATE_WAIT_OFF)){//blink fast red for a while for LOW
 			clearBit(&pLED_G,LED_G);
 			if(tmrBlink1>0){
 				if(tmrBlink2==0){
@@ -232,7 +258,7 @@ int main(void)
 						clearBit(&pLED_R,LED_R);
 					else
 						setBit(&pLED_R,LED_R);
-					tmrBlink2=5;
+					tmrBlink2=2;
 				}
 			}else clearBit(&pLED_R,LED_R);
 		}else if (currentState == STATE_NORMAL){//green for NORMAL operation
@@ -315,7 +341,7 @@ void ResetOptos(){
 ISR(TIMER0_OVF_vect)
 {
 
-	if(tmrGeneral>=24){//each 0,1s
+	if(tmrGeneral>=48){//each 0,1s
 		tmrGeneral = 0;
 		
 		if(tmrBlink1>0)tmrBlink1--;
