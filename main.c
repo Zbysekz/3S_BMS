@@ -61,6 +61,7 @@
 //0,01V
 uint16_t parLow=310; // when go to LOW
 uint16_t parOk=340; // when go back to NORMAL
+uint16_t parMax=420; // when to some of the cell reaches this, stop immediately charging
 uint16_t parBurnStart=415; // when start burning for specific cell
 uint16_t parBurnStop=410; // when stop burning for specific cell
 uint16_t parMinBurnTime=10; // 0,1s
@@ -163,9 +164,9 @@ int main(void)
 						clearBit(&pOUT,OUT);
 				}
 				
-				//if we are burning energy for two or more cells, stop charging
-
-				if( (getBit(pOPTO1,OPTO1) + getBit(pOPTO2,OPTO2) + getBit(pOPTO3,OPTO3)) >= 2){
+				//if we are burning energy for two or more cells, or one of cell's voltage is above max -> stop charging
+				if(( (getBit(pOPTO1,OPTO1) + getBit(pOPTO2,OPTO2) + getBit(pOPTO3,OPTO3)) >= 2) ||
+						(cellA>=parMax || cellB>=parMax || cellC>=parMax)){
 					clearBit(&pCHARGE,CHARGE);
 					tmrFull=parFullDelay;
 				}else{
@@ -214,7 +215,7 @@ int main(void)
 			break;
 			
 			case STATE_WAIT_OFF://delayed entry to STATE_OFF
-				if(stepTimer>20){//wait 20sec
+				if(stepTimer>200){//wait 20sec
 					nextState=STATE_OFF;
 				}
 				break;
