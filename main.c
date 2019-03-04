@@ -2,7 +2,9 @@
  * main.c
  *
  *  Created on: 18. 12. 2018
- *      Author: Zbysek
+ *      Author: Zbysekz
+ *      Processor: ATmega48P
+ *      Fuses: L:0xF7 H:0xDF E:0xFF
  */
 
 #include <avr/io.h>
