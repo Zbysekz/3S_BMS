@@ -192,6 +192,9 @@ int main(void)
 				cli();//sleep and check sometimes if you can go out of this state
 				if (tmrBlink1==0)//only when you finish red fast blinking
 				{
+					clearBit(&pLED_G,LED_G);
+					clearBit(&pLED_R,LED_R);
+
 					sleep_enable();
 					sei();
 					sleep_cpu();
@@ -211,9 +214,9 @@ int main(void)
 					nextState=STATE_CHARGING;
 					break;
 				}
-				
 				//output is cut off
 				clearBit(&pOUT,OUT);
+
 			break;
 			
 			case STATE_WAIT_OFF://delayed entry to STATE_OFF
