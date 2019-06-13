@@ -11,6 +11,7 @@
 #include <util/delay.h>
 #include "main.h"
 #include <avr/interrupt.h>
+#include <avr/wdt.h>
 #include "twi.h"
 #include <avr/sleep.h>
 
@@ -84,6 +85,10 @@ static FILE uart_str = FDEV_SETUP_STREAM(uart_putchar, NULL, _FDEV_SETUP_WRITE);
 int main(void)
 {
 
+	//set WDT prescaler to 8sec//////////
+	wdt_reset();
+	wdt_enable(WDTO_8S);
+
 	//set outputs
 	DDRB = (1<<OPTO1) | (1<<OPTO2) | (1<<OPTO3) ;
 	//set outputs
@@ -111,7 +116,7 @@ int main(void)
 	TWI_Init();
 	InitCRC();//calculate table for fast CRC calculation
 
-	// Use the Power Down sleep mode
+	// Use the Power Save sleep mode - wake up
 	set_sleep_mode(SLEEP_MODE_PWR_SAVE);
 
 	//init interrupt
@@ -127,7 +132,7 @@ int main(void)
 	_delay_s(1);
 
 	while(1){
-
+		wdt_reset();
 
 		UpdateTxData();
 
@@ -186,36 +191,26 @@ int main(void)
 			case STATE_LOW:
 
 				ResetOptos();//turn off all optos
-				
-				ReadCells();
 
-				cli();//sleep and check sometimes if you can go out of this state
+				//output is cut off
+				clearBit(&pOUT,OUT);
+				
 				if (tmrBlink1==0)//only when you finish red fast blinking
-				{
+				{//go sleep forever
 					clearBit(&pLED_G,LED_G);
 					clearBit(&pLED_R,LED_R);
 
+					/* Clear the reset flag. */
+					MCUSR &= ~(1<<WDRF);
+					MCUSR = 0;
+					wdt_disable();
 					sleep_enable();
+					cli();//disable interrupts
+					sleep_cpu();//sleep forever
+					sleep_disable();//it shouldn't never get here
 					sei();
-					sleep_cpu();
-					sleep_disable();
-				}
-				sei();
-
-				
-				//if voltages are ok, go to normal
-				if(cellA>=parOk && cellB>=parOk && cellC>=parOk){
-					nextState=STATE_NORMAL;
-					break;
 				}
 				
-				//if charger is connected, go to CHARGING
-				if(!getBit(pCHARGE_SIG,CHARGE_SIG)){
-					nextState=STATE_CHARGING;
-					break;
-				}
-				//output is cut off
-				clearBit(&pOUT,OUT);
 
 			break;
 			
@@ -231,15 +226,20 @@ int main(void)
 				clearBit(&pLED_G,LED_G);
 				clearBit(&pLED_R,LED_R);
 
+				/* Clear the reset flag. */
+				MCUSR &= ~(1<<WDRF);
+				MCUSR = 0;
+				wdt_disable();
 				sleep_enable();
 				cli();//disable interrupts
 				sleep_cpu();//sleep forever
-				sleep_disable();//it shouldn't get here
+				sleep_disable();//it shouldn't never get here
 				sei();
 				break;
 
 		}
 		
+		//going OFF
 		if(goOff && (currentState!= STATE_WAIT_OFF)&&(currentState!= STATE_OFF)){
 			nextState=STATE_WAIT_OFF;
 			tmrBlink1=500;
